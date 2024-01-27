@@ -227,7 +227,7 @@ class BatchCreativeInterpolationNode:
 
                     # Plotting the data point with a unique color and label
                     color_index = i % len(colors)
-                    plt.plot(cn_frame_numbers[i], cn_weights[i], marker='o', color=colors[color_index], label=label)
+                    plt.plot(ipadapter_frame_numbers[i], ipadapter_weights[i], marker='x', linestyle='--', color=colors[i % len(colors)], label=label)
 
                 # Define a function to generate labels and plot data points
                 def plot_data_with_label(frame_numbers, weights, label_base, marker, linestyle, buffer, colors):
