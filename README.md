@@ -1,8 +1,27 @@
 # Steerable Motion, a ComfyUI custom node for steering videos with batches of images
 
-Steerable Motion is a ComfyUI node for batch creative interpolation. Our goal is to feature the best methods for steering motion with images as video models evolve.	
+Steerable Motion is a ComfyUI node for batch creative interpolation. Our goal is to feature the best methods for steering motion with images as video models evolve.
+
+## 🆕 Interpolation Method 🌟
+I've recently updated our interpolation method for better performance and smoother transitions. Check the demo below:
+
+![New Interpolation Demo](https://github.com/Limbicnation/Steerable-Motion/blob/main/demo/NewInterpolationDemo.gif)
+
+This new method enhances the quality of motion steering, ensuring more fluid and natural transitions. I'm constantly working to improve the algorithms and provide the best possible experimental experience.
+
+## Features
+* Batch creative interpolation
+* Improved motion steering
+* Fluid and natural transitions
+* Image upscale
+
+Please use this updated ![workflow](https://github.com/Limbicnation/ComfyUIWorkflowSuite/blob/main/workflows/BatchImageAnimate-V2-ImprovedInterpolation.json)
+
+---
 
 ![Main example](https://github.com/peteromallet/ComfyUI-Creative-Interpolation/blob/main/demo/main_example.gif)
+
+---
 
 ## Installation
 
