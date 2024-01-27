@@ -5,7 +5,10 @@ Steerable Motion is a ComfyUI node for batch creative interpolation. Our goal is
 ## 🆕 Interpolation Method 🌟
 I've recently updated our interpolation method for better performance and smoother transitions. Check the demo below:
 
-![New Interpolation Demo](https://github.com/Limbicnation/Steerable-Motion/blob/main/demo/NewInterpolationDemo.gif) ![New Interpolation Demo](https://github.com/Limbicnation/Steerable-Motion/blob/main/demo/NewInterpolationDemo2.gif)
+<div style="display: flex; justify-content: space-between;">
+  <img src="https://github.com/Limbicnation/Steerable-Motion/blob/main/demo/NewInterpolationDemo.gif" alt="New Interpolation Demo" width="45%">
+  <img src="https://github.com/Limbicnation/Steerable-Motion/blob/main/demo/NewInterpolationDemo2.gif" alt="New Interpolation Demo 2" width="45%">
+</div>
 
 This new method enhances the quality of motion steering, ensuring more fluid and natural transitions. I'm constantly working to improve the algorithms and provide the best possible experimental experience.
 
