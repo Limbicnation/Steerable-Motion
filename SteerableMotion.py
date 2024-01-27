@@ -1,21 +1,20 @@
 # Standard library imports
 from ast import literal_eval
 from io import BytesIO
-
+import numpy as np
 # Third-party library imports
 import torch
-import torchvision.transforms as TT
+import torchvision.transforms as transforms
+
 from PIL import Image
 import matplotlib.pyplot as plt
 
 # Local application/library specific imports
 import folder_paths
-from .imports.IPAdapterPlus import (IPAdapterApplyImport, prep_image, IPAdapterEncoderImport,)
-from .imports.AdvancedControlNet.latent_keyframe_nodes import (
-    calculate_weights,
-    LatentKeyframeInterpolationNodeImport
-)
+from .imports.IPAdapterPlus import IPAdapterApplyImport, prep_image, IPAdapterEncoderImport
+from .imports.AdvancedControlNet.latent_keyframe_nodes import LatentKeyframeInterpolationNodeImport
 from .imports.AdvancedControlNet.weight_nodes import ScaledSoftUniversalWeightsImport
+from .imports.AdvancedControlNet.nodes_sparsectrl import SparseIndexMethodNodeImport
 from .imports.AdvancedControlNet.nodes import ControlNetLoaderAdvancedImport, AdvancedControlNetApplyImport,TimestepKeyframeNodeImport
     
 class BatchCreativeInterpolationNode:
