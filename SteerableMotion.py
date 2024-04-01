@@ -5,17 +5,11 @@ import numpy as np
 # Third-party library imports
 import torch
 import torchvision.transforms as transforms
-
 from PIL import Image
 import matplotlib.pyplot as plt
-
 # Local application/library specific imports
-import folder_paths
-from .imports.IPAdapterPlus import IPAdapterApplyImport, prep_image, IPAdapterEncoderImport
-from .imports.AdvancedControlNet.latent_keyframe_nodes import LatentKeyframeInterpolationNodeImport
-from .imports.AdvancedControlNet.weight_nodes import ScaledSoftUniversalWeightsImport
+from .imports.ComfyUI_IPAdapter_plus.IPAdapterPlus import IPAdapterTiledImport, PrepImageForClipVisionImport, IPAdapterAdvancedImport, IPAdapterNoiseImport
 from .imports.AdvancedControlNet.nodes_sparsectrl import SparseIndexMethodNodeImport
-from .imports.AdvancedControlNet.nodes import ControlNetLoaderAdvancedImport, AdvancedControlNetApplyImport,TimestepKeyframeNodeImport
 
 class BatchCreativeInterpolationNode:
     @classmethod
@@ -32,7 +26,6 @@ class BatchCreativeInterpolationNode:
                 "model": ("MODEL", ),
                 "ipadapter": ("IPADAPTER", ),
                 "clip_vision": ("CLIP_VISION",),
-                "control_net_name": (folder_paths.get_filename_list("controlnet"), ),    
                 "type_of_frame_distribution": (["linear", "dynamic"],),
                 "linear_frame_distribution_value": ("INT", {"default": 16, "min": 4, "max": 64, "step": 1}),     
                 "dynamic_frame_distribution_values": ("STRING", {"multiline": True, "default": "0,10,26,40"}),                
@@ -41,37 +34,29 @@ class BatchCreativeInterpolationNode:
                 "dynamic_key_frame_influence_values": ("STRING", {"multiline": True, "default": "(1.0,1.0),(1.0,1.5)(1.0,0.5)"}),                
                 "type_of_strength_distribution": (["linear", "dynamic"],),
                 "linear_strength_value": ("STRING", {"multiline": False, "default": "(0.3,0.4)"}),
-                "dynamic_strength_values": ("STRING", {"multiline": True, "default": "(0.0,1.0),(0.0,1.0),(0.0,1.0),(0.0,1.0)"}),
-                "soft_scaled_cn_weights_multiplier": ("FLOAT", {"default": 0.85, "min": 0.0, "max": 10.0, "step": 0.1}),
-                "buffer": ("INT", {"default": 4, "min": 1, "max": 16, "step": 1}), 
-                "relative_cn_strength": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 10.0, "step": 0.01}),
-                "relative_ipadapter_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.01}),
-                "ipadapter_noise": ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "ipadapter_start_at": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "ipadapter_end_at": ("FLOAT", {"default": 0.75, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "cn_start_at": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "cn_end_at": ("FLOAT", {"default": 0.75, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "dynamic_strength_values": ("STRING", {"multiline": True, "default": "(0.0,1.0),(0.0,1.0),(0.0,1.0),(0.0,1.0)"}),                                                                                                                                            
+                "buffer": ("INT", {"default": 4, "min": 1, "max": 16, "step": 1}),       
+                "high_detail_mode": ("BOOLEAN", {"default": True}),                                                                                     
             },
             "optional": {
+                "base_ipa_advanced_settings": ("ADVANCED_IPA_SETTINGS",),
+                "detail_ipa_advanced_settings": ("ADVANCED_IPA_SETTINGS",),
             }
         }
 
-    RETURN_TYPES = ("IMAGE","CONDITIONING","CONDITIONING","MODEL","SPARSE_METHOD","INT")
-    # "comparison_diagram, positive, negative, model, sparse_indexes, last_key_frame_position"
+    RETURN_TYPES = ("IMAGE","CONDITIONING","CONDITIONING","MODEL","SPARSE_METHOD","INT")    
     RETURN_NAMES = ("GRAPH","POSITIVE","NEGATIVE","MODEL","KEYFRAME_POSITIONS","BATCH_SIZE")
     FUNCTION = "combined_function"
 
     CATEGORY = "Steerable-Motion"
 
-    def combined_function(self,positive,negative,images,model,ipadapter,clip_vision,control_net_name,
+    def combined_function(self,positive,negative,images,model,ipadapter,clip_vision,
                           type_of_frame_distribution,linear_frame_distribution_value, dynamic_frame_distribution_values, 
                           type_of_key_frame_influence,linear_key_frame_influence_value,
                           dynamic_key_frame_influence_values,type_of_strength_distribution,
-                          linear_strength_value,dynamic_strength_values, soft_scaled_cn_weights_multiplier,
-                          buffer, relative_cn_strength,relative_ipadapter_strength,ipadapter_noise,
-                          ipadapter_start_at=0.0,ipadapter_end_at=0.75, cn_start_at=0.0, cn_end_at=0.75):
-        
-        
+                          linear_strength_value,dynamic_strength_values,
+                          buffer, high_detail_mode,base_ipa_advanced_settings=None,detail_ipa_advanced_settings=None):
+                
         def get_keyframe_positions(type_of_frame_distribution, dynamic_frame_distribution_values, images, linear_frame_distribution_value):
             if type_of_frame_distribution == "dynamic":
                 # Check if the input is a string or a list
@@ -209,17 +194,7 @@ class BatchCreativeInterpolationNode:
             range_start = batch_index_from
             range_end = batch_index_to
             # if it's the first value, set influence range from 1.0 to 0.0
-            '''
-            if buffer > 0:
-                if i == 0:
-                    range_start = 0
-                else:
-                    if batch_index_from <= buffer:
-                        range_start = buffer                                        
-            else:
-                if i == 1:
-                    range_start = 0
-            '''
+
             if i == number_of_items - 1:
                 range_end = last_key_frame_position
 
@@ -307,8 +282,48 @@ class BatchCreativeInterpolationNode:
             last_position_with_buffer = keyframe_positions[-1] + buffer - 1
             keyframe_positions.append(last_position_with_buffer)
 
-            
-        # GET STRENGTH VALUES
+
+        # GET BASE ADVANCED SETTINGS OR SET DEFAULTS
+        if base_ipa_advanced_settings is None:
+            if high_detail_mode:
+                base_ipa_advanced_settings = {
+                    "ipa_starts_at": 0.0,
+                    "ipa_ends_at": 0.3,
+                    "ipa_weight_type": "ease in-out",
+                    "ipa_weight": 1.0,
+                    "ipa_embeds_scaling": "V only",
+                    "ipa_noise_strength": 0.0,                    
+                    "use_image_for_noise": False,
+                    "type_of_noise": "fade",
+                    "noise_blur": 0,
+                }
+            else:
+                base_ipa_advanced_settings = {
+                    "ipa_starts_at": 0.0,
+                    "ipa_ends_at": 0.75,
+                    "ipa_weight_type": "ease in-out",
+                    "ipa_weight": 1.0,
+                    "ipa_embeds_scaling": "V only",
+                    "ipa_noise_strength": 0.0,
+                    "use_image_for_noise": False,
+                    "type_of_noise": "fade",
+                    "noise_blur": 0,
+                }
+                                
+        # GET DETAILED ADVANCED SETTINGS OR SET DEFAULTS
+        if detail_ipa_advanced_settings is None:
+            if high_detail_mode:
+                detail_ipa_advanced_settings = {
+                    "ipa_starts_at": 0.25,
+                    "ipa_ends_at": 0.75,
+                    "ipa_weight_type": "ease in-out",
+                    "ipa_weight": 1.0,
+                    "ipa_embeds_scaling": "V only",
+                    "ipa_noise_strength": 0.0,
+                    "use_image_for_noise": False,
+                    "type_of_noise": "fade",
+                    "noise_blur": 0,
+                }                 
         
         strength_values = extract_strength_values(type_of_strength_distribution, dynamic_strength_values, keyframe_positions, linear_strength_value)                        
         strength_values = [literal_eval(val) if isinstance(val, str) else val for val in strength_values]                
@@ -368,7 +383,6 @@ class BatchCreativeInterpolationNode:
                 image = images[i-1]
                 key_frame_influence_from,key_frame_influence_to = key_frame_influence_values[i-1]       
                 start_strength, mid_strength, end_strength = strength_values[i-1]
-                # strength_from, strength_to = cn_strength_values[i-1]
 
                 keyframe_position = keyframe_positions[i]
                 previous_key_frame_position = keyframe_positions[i-1]
@@ -380,8 +394,10 @@ class BatchCreativeInterpolationNode:
                 # interpolation =  "ease-out"    
 
             elif i == len(keyframe_positions) - 1:
+
                 image = images[i-2]
                 strength_from = strength_to = strength_values[i-2][1]
+
                 batch_index_from = keyframe_positions[i-1]
                 batch_index_to_excl = last_key_frame_position
                 weights, frame_numbers = calculate_weights(batch_index_from, batch_index_to_excl, strength_from, strength_to, interpolation, False, last_key_frame_position, i, len(keyframe_positions), buffer)
@@ -409,53 +425,96 @@ class BatchCreativeInterpolationNode:
                 # COMBINE FIRST AND SECOND HALF
                 weights = np.concatenate([first_half_weights, second_half_weights])                
                 frame_numbers = np.concatenate([first_half_frame_numbers, second_half_frame_numbers])
-                    
-            # IMPORT REQUIRED NODES
-            latent_keyframe_interpolation_node = LatentKeyframeInterpolationNodeImport()
-            scaled_soft_control_net_weights = ScaledSoftUniversalWeightsImport()
-            timestep_keyframe_node = TimestepKeyframeNodeImport()
-            control_net_loader = ControlNetLoaderAdvancedImport()
-            apply_advanced_control_net = AdvancedControlNetApplyImport()
-            ipadapter_application = IPAdapterApplyImport()
-            ipadapter_encoder = IPAdapterEncoderImport()
-                                                                                                             
-            # IF CONTROL NET IS USED, APPLY IT
-            if relative_cn_strength > 0.0:
-                cn_frame_numbers, cn_weights = process_weights(frame_numbers, weights, relative_cn_strength)        
-                latent_keyframe, = latent_keyframe_interpolation_node.load_keyframe(cn_weights, cn_frame_numbers)
-                control_net_weights, _ = scaled_soft_control_net_weights.load_weights(soft_scaled_cn_weights_multiplier, False)
-                timestep_keyframe = timestep_keyframe_node.load_keyframe(start_percent=0.0, control_net_weights=control_net_weights, latent_keyframe=latent_keyframe, prev_timestep_keyframe=None)[0]            
-                control_net = control_net_loader.load_controlnet(control_net_name, timestep_keyframe)[0]
-                positive, negative = apply_advanced_control_net.apply_controlnet(positive, negative, control_net, image.unsqueeze(0), 1.0, cn_start_at, cn_end_at)
-                all_cn_frame_numbers.append(cn_frame_numbers)
-                all_cn_weights.append(cn_weights)
+                                                                                                                                                                                                                   
+            # PROCESS WEIGHTS
+            ipa_frame_numbers, ipa_weights = process_weights(frame_numbers, weights, 1.0)    
+
+            prepare_for_clip_vision = PrepImageForClipVisionImport()
+            prepped_image, = prepare_for_clip_vision.prep_image(image=image.unsqueeze(0), interpolation="LANCZOS", crop_position="pad", sharpening=0.1)
+                                        
+            mask = create_mask_batch(last_key_frame_position, ipa_weights, ipa_frame_numbers)       
+
+            if base_ipa_advanced_settings["ipa_noise_strength"] > 0:
+                if base_ipa_advanced_settings["use_image_for_noise"]:
+                    noise_image = prepped_image
+                else:
+                    noise_image = None
+                ipa_noise = IPAdapterNoiseImport()
+                negative_noise, = ipa_noise.make_noise(type=base_ipa_advanced_settings["type_of_noise"], strength=base_ipa_advanced_settings["ipa_noise_strength"], blur=base_ipa_advanced_settings["noise_blur"], image_optional=noise_image)
             else:
-                all_cn_frame_numbers = None
-                all_cn_weights = None
-            
-            # IF IP ADAPTER IS USED, APPLY IT
-            if relative_ipadapter_strength > 0.0:                    
-                ipa_frame_numbers, ipa_weights = process_weights(frame_numbers, weights, relative_ipadapter_strength)     
-                prepped_image = prep_image(image=image.unsqueeze(0), interpolation="LANCZOS", crop_position="pad", sharpening=0.0)[0]                        
-                mask = create_mask_batch(last_key_frame_position, ipa_weights, ipa_frame_numbers)                        
-                embed, = ipadapter_encoder.preprocess(clip_vision, prepped_image, True, 0.0, 1.0)                        
-                model,_,_ = ipadapter_application.apply_ipadapter(ipadapter=ipadapter, model=model, weight=1.0, image=None, weight_type="original", 
-                                                  noise=ipadapter_noise, embeds=embed, attn_mask=mask, start_at=ipadapter_start_at, end_at=ipadapter_end_at, unfold_batch=True)    
-                all_ipa_frame_numbers.append(ipa_frame_numbers)
-                all_ipa_weights.append(ipa_weights)
-            else:
-                all_ipa_frame_numbers = None
-                all_ipa_weights = None
+                negative_noise = None
+
+            ipadapter_application = IPAdapterAdvancedImport()
+            model, = ipadapter_application.apply_ipadapter(model=model, ipadapter=ipadapter, image=prepped_image, weight=base_ipa_advanced_settings["ipa_weight"], weight_type=base_ipa_advanced_settings["ipa_weight_type"], start_at=base_ipa_advanced_settings["ipa_starts_at"], end_at=base_ipa_advanced_settings["ipa_ends_at"], clip_vision=clip_vision, attn_mask=mask,image_negative=negative_noise,embeds_scaling=base_ipa_advanced_settings["ipa_embeds_scaling"])                
+
+            if high_detail_mode:
+                if detail_ipa_advanced_settings["ipa_noise_strength"] > 0:
+                    if detail_ipa_advanced_settings["use_image_for_noise"]:
+                        noise_image = image.unsqueeze(0)
+                    else:
+                        noise_image = None
+                    ipa_noise = IPAdapterNoiseImport()
+                    negative_noise, = ipa_noise.make_noise(type=detail_ipa_advanced_settings["type_of_noise"], strength=detail_ipa_advanced_settings["ipa_noise_strength"], blur=detail_ipa_advanced_settings["noise_blur"], image_optional=noise_image)                    
+                else:
+                    negative_noise = None
+        
+                tiled_ipa_application = IPAdapterTiledImport()
+                model, *_ = tiled_ipa_application.apply_tiled(model=model, ipadapter=ipadapter, image=image.unsqueeze(0), weight=detail_ipa_advanced_settings["ipa_weight"], weight_type=detail_ipa_advanced_settings["ipa_weight_type"], start_at=detail_ipa_advanced_settings["ipa_starts_at"], end_at=detail_ipa_advanced_settings["ipa_ends_at"], clip_vision=clip_vision, attn_mask=mask,sharpening=0.1,image_negative=negative_noise,embeds_scaling=detail_ipa_advanced_settings["ipa_embeds_scaling"])
+
+            all_ipa_frame_numbers.append(ipa_frame_numbers)
+            all_ipa_weights.append(ipa_weights)
         
         comparison_diagram, = plot_weight_comparison(all_cn_frame_numbers, all_cn_weights, all_ipa_frame_numbers, all_ipa_weights, buffer)
 
         return comparison_diagram, positive, negative, model, sparse_indexes, last_key_frame_position
 
+class IpaConfigurationNode:
+    WEIGHT_TYPES = ["linear", "ease in", "ease out", 'ease in-out', 'reverse in-out', 'weak input', 'weak output', 'weak middle', 'strong middle']
+    IPA_EMBEDS_SCALING_OPTIONS = ["V only", "K+V", "K+V w/ C penalty", "K+mean(V) w/ C penalty"]
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "ipa_starts_at": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "ipa_ends_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "ipa_weight_type": (cls.WEIGHT_TYPES,),
+                "ipa_weight": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01}),
+                "ipa_embeds_scaling": (cls.IPA_EMBEDS_SCALING_OPTIONS,),
+                "ipa_noise_strength": ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "use_image_for_noise": ("BOOLEAN", {"default": False}),                                  
+                "type_of_noise": (["fade", "dissolve", "gaussian", "shuffle"], ),
+                "noise_blur": ("INT", { "default": 0, "min": 0, "max": 32, "step": 1 }),
+            },
+            "optional": {}
+        }
+    
+    FUNCTION = "process_inputs"
+    RETURN_TYPES = ("ADVANCED_IPA_SETTINGS",)
+    RETURN_NAMES = ("configuration",)
+    CATEGORY = "Steerable-Motion"
+
+    @classmethod
+    def process_inputs(cls, ipa_starts_at, ipa_ends_at, ipa_weight_type, ipa_weight, ipa_embeds_scaling, ipa_noise_strength, use_image_for_noise, type_of_noise, noise_blur):
+        return {
+            "ipa_starts_at": ipa_starts_at,
+            "ipa_ends_at": ipa_ends_at,
+            "ipa_weight_type": ipa_weight_type,
+            "ipa_weight": ipa_weight,
+            "ipa_embeds_scaling": ipa_embeds_scaling,
+            "ipa_noise_strength": ipa_noise_strength,
+            "use_image_for_noise": use_image_for_noise,
+            "type_of_noise": type_of_noise,
+            "noise_blur": noise_blur,
+        },
+
 # NODE MAPPING
 NODE_CLASS_MAPPINGS = {
-    "BatchCreativeInterpolation": BatchCreativeInterpolationNode    
+    "BatchCreativeInterpolation": BatchCreativeInterpolationNode,
+    "IpaConfiguration": IpaConfigurationNode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {    
-    "BatchCreativeInterpolation": "Batch Creative Interpolation 🎞️🅢🅜"
+    "BatchCreativeInterpolation": "Batch Creative Interpolation 🎞️🅢🅜",
+    "IpaConfiguration": "IPA Configuration  🎞️🅢🅜",
 }
